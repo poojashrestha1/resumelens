@@ -1,0 +1,24 @@
+name: Validate
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Python syntax
+        run: python -m compileall -q backend aws
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: React build
+        run: cd frontend && npm install --no-audit --no-fund && npm run build
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: '1.10.5'}
+      - name: Terraform format
+        run: terraform -chdir=terraform fmt -recursive && terraform -chdir=terraform fmt -check -recursive

@@ -1,0 +1,12 @@
+**/.env
+**/__pycache__/
+**/.venv/
+**/node_modules/
+frontend/dist/
+backend/data/
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/*.tfvars
+terraform/lambda-package.zip
+*.pyc
+.DS_Store

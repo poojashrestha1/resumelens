@@ -1,0 +1,51 @@
+#!/bin/bash
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y python3 python3-venv python3-pip nginx caddy unzip awscli curl
+mkdir -p /opt/careerflow /var/www/careerflow
+cat >/etc/careerflow.env <<'ENV'
+APP_MODE=aws
+AWS_REGION=${region}
+S3_BUCKET=${bucket}
+APPLICATIONS_TABLE=${applications}
+JOBS_TABLE=${jobs}
+COGNITO_POOL_ID=${pool}
+COGNITO_CLIENT_ID=${client}
+CORS_ORIGINS=${domain != "" ? "https://${domain}" : "http://localhost:5173"}
+ENV
+chmod 600 /etc/careerflow.env
+cat >/etc/systemd/system/careerflow.service <<'SERVICE'
+[Unit]
+Description=CareerFlow FastAPI
+After=network-online.target
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/careerflow/backend
+EnvironmentFile=/etc/careerflow.env
+ExecStart=/opt/careerflow/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=full
+[Install]
+WantedBy=multi-user.target
+SERVICE
+cat >/etc/caddy/Caddyfile <<'CADDY'
+${domain != "" ? domain : ":80"} {
+  encode gzip
+  handle /api/* {
+    reverse_proxy 127.0.0.1:8000
+  }
+  handle {
+    root * /var/www/careerflow
+    try_files {path} /index.html
+    file_server
+  }
+}
+CADDY
+systemctl disable --now nginx || true
+systemctl enable --now caddy
+systemctl daemon-reload
+# SSM agent is installed on official Canonical EC2 Ubuntu images.
+systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || true

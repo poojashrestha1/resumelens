@@ -1,0 +1,10 @@
+output "instance_id" { value = aws_instance.web.id }
+output "public_ip" { value = aws_eip.web.public_ip }
+output "site_url" { value = local.use_https ? "https://${var.domain_name}" : "http://${aws_eip.web.public_ip}" }
+output "release_bucket" { value = aws_s3_bucket.releases.bucket }
+output "resume_bucket" { value = aws_s3_bucket.resumes.bucket }
+output "cognito_pool_id" { value = aws_cognito_user_pool.users.id }
+output "cognito_client_id" { value = aws_cognito_user_pool_client.web.id }
+output "applications_table" { value = aws_dynamodb_table.applications.name }
+output "jobs_table" { value = aws_dynamodb_table.jobs.name }
+output "lambda_name" { value = aws_lambda_function.resume.function_name }
