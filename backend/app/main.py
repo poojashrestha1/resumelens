@@ -60,7 +60,7 @@ def confirm(form:ConfirmForm):
 @app.post('/api/auth/login')
 def login(form:AuthForm):
     if settings.app_mode=='local':
-        demo={'admin@demo.local':('admin12345','admin'),'hr@demo.local':('hr12345678','hr'),'applicant@demo.local':('applicant123','applicant')}
+        demo={'admin@demo.example.com':('admin12345','admin'),'hr@demo.example.com':('hr12345678','hr'),'applicant@demo.example.com':('applicant123','applicant')}
         stored=demo.get(form.email.lower())
         if not stored or not hmac.compare_digest(stored[0],form.password):raise HTTPException(401,'Invalid demo login')
         token=jwt.encode({'sub':form.email.lower(),'role':stored[1],'exp':int(time.time())+3600,'aud':'careerflow-local'},'local-only-development-key',algorithm='HS256')
@@ -86,6 +86,11 @@ def me(user=Depends(verified_user)):
 @app.get('/api/jobs')
 def jobs():return sorted([j for j in storage.all_items('jobs') if j.get('active',True)],key=lambda j:j['title'])
 
+@app.get('/api/staff/jobs')
+def staff_jobs(_=Depends(staff)):
+    return sorted(storage.all_items('jobs'),key=lambda j:j.get('title',''))
+
+
 class JobForm(BaseModel):
     title:str=Field(min_length=3,max_length=100)
     department:str=Field(min_length=2,max_length=100)
@@ -94,21 +99,28 @@ class JobForm(BaseModel):
     description:str=Field(min_length=5,max_length=2000)
     active:bool=True
 
-@app.post('/api/admin/jobs',status_code=201)
-def create_job(form:JobForm,_=Depends(admin)):
+@app.post('/api/staff/jobs',status_code=201)
+def create_job(form:JobForm,_=Depends(staff)):
     job={'id':str(uuid.uuid4()),**form.model_dump()};storage.put('jobs',job);return job
 
-@app.patch('/api/admin/jobs/{job_id}')
-def edit_job(job_id:str,form:JobForm,_=Depends(admin)):
+@app.patch('/api/staff/jobs/{job_id}')
+def edit_job(job_id:str,form:JobForm,_=Depends(staff)):
     if not storage.get('jobs',job_id):raise HTTPException(404,'Job not found')
     storage.patch('jobs',job_id,form.model_dump());return storage.get('jobs',job_id)
+
+@app.delete('/api/staff/jobs/{job_id}')
+def archive_job(job_id:str,_=Depends(staff)):
+    if not storage.get('jobs',job_id):raise HTTPException(404,'Job not found')
+    # Retain applications and audit records; do not hard-delete positions.
+    storage.patch('jobs',job_id,{'active':False,'archived_at':now()})
+    return {'message':'Position archived'}
 
 class RecruiterForm(BaseModel):
     email:EmailStr
 
 @app.get('/api/admin/recruiters')
 def recruiters(_=Depends(admin)):
-    if settings.app_mode=='local':return [{'email':'hr@demo.local','enabled':True}]
+    if settings.app_mode=='local':return [{'email':'hr@demo.example.com','enabled':True}]
     # Small demo pool; pagination for accounts at larger scale.
     members=[];token=None
     while True:
@@ -169,7 +181,13 @@ async def submit(job_id:Annotated[str,Form()],name:Annotated[str,Form()],phone:A
     except Exception:raise HTTPException(415,'Unreadable or password-protected PDF')
     user_sub=user['sub'];app_id=str(uuid.uuid4());key=f'resumes/{app_id}.pdf'
     # Store applicant subject, not email supplied by browser.
-    record={'id':app_id,'applicant_sub':user_sub,'name':name.strip(),'phone':phone.strip(),'position':job['title'],'job_id':job_id,'education':education(text) if settings.app_mode=='local' else 'Pending extraction','skills':'[]','experience':'','resume_key':key,'processing_status':'completed' if settings.app_mode=='local' and text.strip() else 'processing' if settings.app_mode=='aws' else 'review_required','review_status':'applied','created_at':now(),'processing_error':''}
+    record={'id':app_id,'applicant_sub':user_sub,'name':name.strip(),'phone':phone.strip(),'position':job['title'],'job_id':job_id,'education':education(text) if settings.app_mode=='local' else 'Pending extraction','skills':[],'experience':'','volunteer_experience':'','resume_text':'','processing_warning':'','section_evidence':[],'resume_key':key,'processing_status':'processing' if settings.app_mode=='aws' else 'review_required','review_status':'applied','created_at':now(),'processing_error':''}
+    if settings.app_mode=='local' and text.strip():
+        # Shared parser matches production Lambda behavior in offline demonstrations.
+        import sys
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'aws'))
+        from resume_parser import parse_resume
+        record.update(parse_resume(text))
     storage.put('applications',record)
     try:
         if settings.app_mode=='aws':
@@ -186,8 +204,38 @@ def my_applications(user=Depends(verified_user)):
     return sorted([a for a in storage.all_items('applications') if a.get('applicant_sub')==user['sub']],key=lambda x:x['created_at'],reverse=True)
 
 @app.get('/api/staff/applications')
-def staff_applications(_=Depends(staff)):
-    return sorted(storage.all_items('applications'),key=lambda x:x['created_at'],reverse=True)
+def staff_applications(q:str='',job_id:str='',_ = Depends(staff)):
+    # Small teaching/demo dataset only: DynamoDB Scan isn't a scalable search engine.
+    # Matches raw Textract text AND parsed fields; cap query length for safety.
+    if len(q)>150:raise HTTPException(422,'Query too long')
+    needle=q.strip().casefold()
+    results=[]
+    for item in storage.all_items('applications'):
+        if job_id and item.get('job_id')!=job_id:continue
+        if needle:
+            searchable=' '.join(str(item.get(k,'')) for k in ('name','position','skills','education','experience','volunteer_experience','resume_text'))
+            if needle not in searchable.casefold():continue
+        results.append(item)
+    return sorted(results,key=lambda x:x.get('created_at',''),reverse=True)[:250]
+
+
+@app.get('/api/staff/aws-resources')
+def aws_resources(_=Depends(staff)):
+    # Configuration and observed application states, not a live AWS Health assertion.
+    records=storage.all_items('applications')
+    state_counts={status:sum(a.get('processing_status')==status for a in records)
+                  for status in ('processing','completed','review_required','upload_failed')}
+    return {'region':settings.aws_region,'app_mode':settings.app_mode,
+            'processing_counts':state_counts,
+            'services':[
+                {'name':'Amazon EC2 + Caddy','purpose':'Hosts React frontend and FastAPI API'},
+                {'name':'Amazon Cognito','purpose':'Authenticates users and assigns Admin/HR groups'},
+                {'name':'Amazon S3','purpose':'Stores original private PDF résumés','resource':settings.s3_bucket},
+                {'name':'AWS Lambda','purpose':'Processes uploaded documents asynchronously'},
+                {'name':'Amazon Textract','purpose':'OCR extraction of printed résumé text'},
+                {'name':'Amazon Comprehend','purpose':'Optional named entity enrichment; does not determine experience'},
+                {'name':'Amazon DynamoDB','purpose':'Stores job and candidate records','resource':settings.applications_table},
+                {'name':'Amazon CloudWatch','purpose':'Captures Lambda and application operational logs'}]}
 
 class Review(BaseModel):
     status:str

@@ -225,7 +225,7 @@ resource "aws_iam_role_policy" "lambda" {
 
 data "archive_file" "lambda" {
   type = "zip"
-  source_file = "${path.module}/../aws/lambda_function.py"
+  source_dir = "${path.module}/../aws"
   output_path = "${path.module}/lambda-package.zip"
 }
 resource "aws_lambda_function" "resume" {

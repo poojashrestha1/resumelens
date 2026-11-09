@@ -54,7 +54,7 @@ jobs:
           npm install --no-audit --no-fund
           VITE_API_URL='' npm run build
           cd ..
-          tar -czf /tmp/careerflow-release.tgz --exclude='__pycache__' --exclude='.venv' -C . backend frontend/dist scripts/install_on_ec2.sh
+          tar -czf /tmp/careerflow-release.tgz --exclude='__pycache__' --exclude='.venv' -C . backend aws/resume_parser.py frontend/dist scripts/install_on_ec2.sh
           BUCKET=$(terraform -chdir=terraform output -raw release_bucket)
           aws s3 cp /tmp/careerflow-release.tgz "s3://$BUCKET/release.tgz"
       - name: Wait for SSM and install application

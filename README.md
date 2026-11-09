@@ -158,9 +158,9 @@ Open `http://localhost:5173`. In **local** mode, Cognito registration and HR inv
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@demo.local` | `admin12345` |
-| HR | `hr@demo.local` | `hr12345678` |
-| Applicant | `applicant@demo.local` | `applicant123` |
+| Admin | `admin@demo.example.com` | `admin12345` |
+| HR | `hr@demo.example.com` | `hr12345678` |
+| Applicant | `applicant@demo.example.com` | `applicant123` |
 
 Local storage uses SQLite and reads embedded PDF text with PyMuPDF. AWS uses Textract to support scanned and multi-page PDFs.
 
@@ -184,3 +184,28 @@ terraform/            All disposable AWS resources (Terraform)
 scripts/              AWS bootstrap and EC2 deployment scripts
 .github/workflows/    CI validation + manual deploy/destroy
 ```
+
+## V3 ATS improvements (2026-11-09)
+
+- **HR and Admin** can create, edit and archive jobs using `/api/staff/jobs`; `/api/staff/jobs` returns active and archived. Archiving preserves past applications. Only Admin can invite/manage HR.
+- **Applicant-only** application submission is enforced in FastAPI (`403` for HR/Admin). The React careers page hides Apply for signed-in HR/Admin.
+- Staff application table displays **Name, Skills, Education, Experience, Volunteer Experience, Position, Status, extraction review, CV**. Keyword matching checks these fields **and full OCR text**.
+- **Résumé extraction** now uses Textract as OCR, a deterministic section-aware parser for CV fields, and Comprehend only for optional entity enrichment. Missing education or experience produces `review_required`, never fabricated information. AWS extraction duration, recognized headings, error and warning are stored for review.
+- **AWS Processing** tab explains services and shows **recorded app processing counts**, not unverified AWS service-health claims.
+- The starter project uses DynamoDB Scan for small test datasets (limit 250 returned records). Full-text search at scale requires OpenSearch or a separate index.
+
+**Accuracy limitations:** Scanned, multi-column, image-heavy, unusual, and non-English PDFs may be misread by Textract or the heading rules. Test varied real and synthetic CVs and review flagged results. No parser can guarantee correct extraction of every résumé. Human review is required for consequential hiring decisions.
+
+### Local tests
+
+```bash
+python -m pip install -r backend/requirements.txt
+PYTHONPATH=aws python -m pytest aws/test_resume_parser.py -q
+cd backend && python -m pytest test_smoke.py test_roles.py -q
+```
+
+### Updating the already deployed project
+
+Replace the source files in your cloned GitHub project with the files from this ZIP, then commit and push to `main`. Run the existing GitHub Actions **AWS Lab Deploy or Destroy** workflow with `action=deploy` (do not select `destroy`). Terraform updates the Lambda ZIP and the application package is redeployed to EC2. Because the Lambda archive now contains the parser as well as the handler, changing these source files updates the Lambda code on the next Terraform apply. Verify the GitHub Action plan carefully for unwanted resource replacement, especially EC2 and Cognito. Never run destroy to update code: destroy deletes user pools and data.
+
+Use only sample résumés until the application has HTTPS and is evaluated for privacy/security. S3 documents may contain personal data; avoid exposing raw extracted text beyond authorized staff.
