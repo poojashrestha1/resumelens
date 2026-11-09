@@ -69,10 +69,11 @@ jobs:
             if [[ "$STATUS" == "Online" ]]; then break; fi
             sleep 20
           done
-          # Fail at the first error, including cloud-init failures.
-          # AWS CLI is installed explicitly by user_data.sh.tftpl.
+          # Cloud-init can return 2 for recoverable metadata (IPv6) warnings.
+          # Do not use the exit code alone as the readiness check: verify the
+          # required AWS CLI, application env file and Caddy configuration.
           cat > /tmp/ssm-params.json <<EOF2
-          {"commands":["set -eu","cloud-init status --wait --long","/usr/local/bin/aws --version","/usr/local/bin/aws s3 cp s3://$BUCKET/release.tgz /tmp/careerflow-release.tgz","mkdir -p /opt/careerflow && tar -xzf /tmp/careerflow-release.tgz -C /opt/careerflow","bash /opt/careerflow/scripts/install_on_ec2.sh"]}
+          {"commands":["set -eu","cloud-init status --wait --long || true","test -x /usr/local/bin/aws && test -f /etc/careerflow.env && test -f /etc/caddy/Caddyfile","/usr/local/bin/aws --version","/usr/local/bin/aws s3 cp s3://$BUCKET/release.tgz /tmp/careerflow-release.tgz","mkdir -p /opt/careerflow && tar -xzf /tmp/careerflow-release.tgz -C /opt/careerflow","bash /opt/careerflow/scripts/install_on_ec2.sh"]}
           EOF2
           CMD=$(aws ssm send-command --instance-ids "$ID" --document-name AWS-RunShellScript --parameters file:///tmp/ssm-params.json --timeout-seconds 900 --query 'Command.CommandId' --output text)
           RESULT="Pending"
