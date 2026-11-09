@@ -1,7 +1,14 @@
-data "aws_caller_identity" "current" {}
-data "aws_availability_zones" "available" { state = "available" }
-data "aws_ssm_parameter" "ubuntu_ami" { name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id" }
-resource "random_id" "suffix" { byte_length = 4 }
+data "aws_caller_identity" "current" {
+}
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+data "aws_ssm_parameter" "ubuntu_ami" {
+  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+}
+resource "random_id" "suffix" {
+  byte_length = 4
+}
 locals {
   prefix    = "${var.project}-${random_id.suffix.hex}"
   use_https = var.domain_name != "" && var.hosted_zone_id != ""
@@ -26,8 +33,10 @@ resource "aws_internet_gateway" "main" {
 }
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-  route { cidr_block = "0.0.0.0/0"
-   gateway_id = aws_internet_gateway.main.id }
+  route {
+    cidr_block = "0.0.0.0/0"
+   gateway_id = aws_internet_gateway.main.id
+  }
 }
 resource "aws_route_table_association" "public" {
   subnet_id = aws_subnet.public.id
@@ -36,24 +45,32 @@ resource "aws_route_table_association" "public" {
 resource "aws_security_group" "web" {
   name_prefix = "${local.prefix}-web-"
   vpc_id = aws_vpc.main.id
-  ingress { description = "HTTP for Caddy ACME or initial checks"
+  ingress {
+    description = "HTTP for Caddy ACME or initial checks"
    from_port = 80
    to_port = 80
    protocol = "tcp"
-   cidr_blocks = [var.my_cidr] }
-  ingress { description = "HTTPS"
+   cidr_blocks = [var.my_cidr]
+  }
+  ingress {
+    description = "HTTPS"
    from_port = 443
    to_port = 443
    protocol = "tcp"
-   cidr_blocks = [var.my_cidr] }
-  egress { from_port = 0
+   cidr_blocks = [var.my_cidr]
+  }
+  egress {
+    from_port = 0
    to_port = 0
    protocol = "-1"
-   cidr_blocks = ["0.0.0.0/0"] }
+   cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
-resource "aws_s3_bucket" "resumes" { bucket = "${local.prefix}-resumes"
-   force_destroy = true }
+resource "aws_s3_bucket" "resumes" {
+  bucket = "${local.prefix}-resumes"
+   force_destroy = true
+  }
 resource "aws_s3_bucket_public_access_block" "resumes" {
   bucket = aws_s3_bucket.resumes.id
   block_public_acls = true
@@ -63,10 +80,16 @@ resource "aws_s3_bucket_public_access_block" "resumes" {
 }
 resource "aws_s3_bucket_server_side_encryption_configuration" "resumes" {
   bucket = aws_s3_bucket.resumes.id
-  rule { apply_server_side_encryption_by_default { sse_algorithm = "AES256" } }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
-resource "aws_s3_bucket" "releases" { bucket = "${local.prefix}-releases"
-   force_destroy = true }
+resource "aws_s3_bucket" "releases" {
+  bucket = "${local.prefix}-releases"
+   force_destroy = true
+  }
 resource "aws_s3_bucket_public_access_block" "releases" {
   bucket = aws_s3_bucket.releases.id
   block_public_acls = true
@@ -76,22 +99,30 @@ resource "aws_s3_bucket_public_access_block" "releases" {
 }
 resource "aws_s3_bucket_server_side_encryption_configuration" "releases" {
   bucket = aws_s3_bucket.releases.id
-  rule { apply_server_side_encryption_by_default { sse_algorithm = "AES256" } }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 resource "aws_dynamodb_table" "applications" {
   name = "${local.prefix}-applications"
   billing_mode = "PAY_PER_REQUEST"
   hash_key = "id"
-  attribute { name = "id"
-   type = "S" }
+  attribute {
+    name = "id"
+   type = "S"
+  }
 }
 resource "aws_dynamodb_table" "jobs" {
   name = "${local.prefix}-jobs"
   billing_mode = "PAY_PER_REQUEST"
   hash_key = "id"
-  attribute { name = "id"
-   type = "S" }
+  attribute {
+    name = "id"
+   type = "S"
+  }
 }
 resource "aws_dynamodb_table_item" "sample_jobs" {
   for_each = {
@@ -116,15 +147,25 @@ resource "aws_cognito_user_pool" "users" {
   name = "${local.prefix}-users"
   username_attributes = ["email"]
   auto_verified_attributes = ["email"]
-  password_policy { minimum_length = 10
+  password_policy {
+    minimum_length = 10
    require_lowercase = true
    require_uppercase = true
    require_numbers = true
-   require_symbols = false }
-  admin_create_user_config { allow_admin_create_user_only = false }
-  account_recovery_setting { recovery_mechanism { name = "verified_email"
-   priority = 1 } }
-  lifecycle { prevent_destroy = false }
+   require_symbols = false
+  }
+  admin_create_user_config {
+    allow_admin_create_user_only = false
+  }
+  account_recovery_setting {
+    recovery_mechanism {
+      name = "verified_email"
+      priority = 1
+    }
+  }
+  lifecycle {
+    prevent_destroy = false
+  }
 }
 resource "aws_cognito_user_pool_client" "web" {
   name = "${local.prefix}-web"
@@ -133,12 +174,16 @@ resource "aws_cognito_user_pool_client" "web" {
   explicit_auth_flows = ["ALLOW_USER_PASSWORD_AUTH","ALLOW_REFRESH_TOKEN_AUTH","ALLOW_USER_SRP_AUTH"]
   prevent_user_existence_errors = "ENABLED"
 }
-resource "aws_cognito_user_group" "admin" { user_pool_id = aws_cognito_user_pool.users.id
+resource "aws_cognito_user_group" "admin" {
+  user_pool_id = aws_cognito_user_pool.users.id
    name = "admin"
-   precedence = 0 }
-resource "aws_cognito_user_group" "hr" { user_pool_id = aws_cognito_user_pool.users.id
+   precedence = 0
+  }
+resource "aws_cognito_user_group" "hr" {
+  user_pool_id = aws_cognito_user_pool.users.id
    name = "hr"
-   precedence = 1 }
+   precedence = 1
+  }
 
 resource "aws_iam_role" "ec2" {
   name = "${local.prefix}-ec2-role"
@@ -156,8 +201,10 @@ resource "aws_iam_role_policy" "app" {
     {Effect="Allow",Action=["cognito-idp:AdminCreateUser","cognito-idp:AdminAddUserToGroup","cognito-idp:ListUsersInGroup","cognito-idp:AdminListGroupsForUser","cognito-idp:AdminDisableUser","cognito-idp:AdminEnableUser"],Resource=aws_cognito_user_pool.users.arn}
   ]})
 }
-resource "aws_iam_instance_profile" "ec2" { name = "${local.prefix}-profile"
-   role = aws_iam_role.ec2.name }
+resource "aws_iam_instance_profile" "ec2" {
+  name = "${local.prefix}-profile"
+   role = aws_iam_role.ec2.name
+  }
 
 resource "aws_iam_role" "lambda" {
   name = "${local.prefix}-lambda-role"
@@ -190,7 +237,9 @@ resource "aws_lambda_function" "resume" {
   handler = "lambda_function.handler"
   timeout = 300
   memory_size = 256
-  environment { variables = { AWS_REGION_NAME = var.aws_region, S3_BUCKET = aws_s3_bucket.resumes.bucket, APPLICATIONS_TABLE = aws_dynamodb_table.applications.name } }
+  environment {
+    variables = { AWS_REGION_NAME = var.aws_region, S3_BUCKET = aws_s3_bucket.resumes.bucket, APPLICATIONS_TABLE = aws_dynamodb_table.applications.name }
+  }
   depends_on = [aws_iam_role_policy.lambda,aws_iam_role_policy_attachment.lambda_logs]
 }
 resource "aws_cloudwatch_log_group" "resume" {
@@ -207,10 +256,12 @@ resource "aws_lambda_permission" "allow_s3" {
 }
 resource "aws_s3_bucket_notification" "resume" {
   bucket = aws_s3_bucket.resumes.id
-  lambda_function { lambda_function_arn = aws_lambda_function.resume.arn
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.resume.arn
    events = ["s3:ObjectCreated:*"]
    filter_prefix = "resumes/"
-   filter_suffix = ".pdf" }
+   filter_suffix = ".pdf"
+  }
   depends_on = [aws_lambda_permission.allow_s3]
 }
 
@@ -228,10 +279,14 @@ resource "aws_instance" "web" {
     region=var.aws_region, domain=var.domain_name
   })
   user_data_replace_on_change = true
-  root_block_device { volume_size = 16
+  root_block_device {
+    volume_size = 16
    volume_type = "gp3"
-   encrypted = true }
-  metadata_options { http_tokens = "required" }
+   encrypted = true
+  }
+  metadata_options {
+    http_tokens = "required"
+  }
   tags = { Name = "${local.prefix}-ec2"
    Project = var.project }
   depends_on = [aws_iam_role_policy.app,aws_iam_role_policy_attachment.ssm]
