@@ -24,12 +24,6 @@ jobs:
         with:
           terraform_version: '1.10.5'
           terraform_wrapper: false
-      - name: Inspect GitHub OIDC claims
-        run: |
-          curl -fsS \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
-            | jq '.value | split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson | {sub, aud}'
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -75,9 +69,10 @@ jobs:
             if [[ "$STATUS" == "Online" ]]; then break; fi
             sleep 20
           done
-          # cloud-init may still be installing packages; the remote script waits for it.
+          # Fail at the first error, including cloud-init failures.
+          # AWS CLI is installed explicitly by user_data.sh.tftpl.
           cat > /tmp/ssm-params.json <<EOF2
-          {"commands":["cloud-init status --wait","aws s3 cp s3://$BUCKET/release.tgz /tmp/careerflow-release.tgz","mkdir -p /opt/careerflow && tar -xzf /tmp/careerflow-release.tgz -C /opt/careerflow","bash /opt/careerflow/scripts/install_on_ec2.sh"]}
+          {"commands":["set -eu","cloud-init status --wait --long","/usr/local/bin/aws --version","/usr/local/bin/aws s3 cp s3://$BUCKET/release.tgz /tmp/careerflow-release.tgz","mkdir -p /opt/careerflow && tar -xzf /tmp/careerflow-release.tgz -C /opt/careerflow","bash /opt/careerflow/scripts/install_on_ec2.sh"]}
           EOF2
           CMD=$(aws ssm send-command --instance-ids "$ID" --document-name AWS-RunShellScript --parameters file:///tmp/ssm-params.json --timeout-seconds 900 --query 'Command.CommandId' --output text)
           RESULT="Pending"

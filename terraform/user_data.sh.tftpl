@@ -2,7 +2,17 @@
 set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y python3 python3-venv python3-pip nginx caddy unzip awscli curl
+apt-get install -y python3 python3-venv python3-pip caddy unzip curl ca-certificates
+# Install AWS CLI v2 explicitly; the Ubuntu awscli apt package may not be available.
+case "$(uname -m)" in
+  x86_64) AWS_CLI_ARCH=x86_64 ;;
+  aarch64) AWS_CLI_ARCH=aarch64 ;;
+  *) echo "Unsupported architecture for AWS CLI: $(uname -m)" >&2; exit 1 ;;
+esac
+curl --fail --location --silent --show-error "https://awscli.amazonaws.com/awscli-exe-linux-$AWS_CLI_ARCH.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp/awscli-install
+/tmp/awscli-install/aws/install --update
+/usr/local/bin/aws --version
 mkdir -p /opt/careerflow /var/www/careerflow
 cat >/etc/careerflow.env <<'ENV'
 APP_MODE=aws
@@ -44,7 +54,6 @@ ${domain != "" ? domain : ":80"} {
   }
 }
 CADDY
-systemctl disable --now nginx || true
 systemctl enable --now caddy
 systemctl daemon-reload
 # SSM agent is installed on official Canonical EC2 Ubuntu images.
