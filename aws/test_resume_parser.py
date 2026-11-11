@@ -31,3 +31,32 @@ def test_section_heading_with_inline_content():
     assert 'SQL' in result['skills']
     assert 'BSc IT' in result['education']
     assert 'Tutored students' in result['volunteer_experience']
+
+def test_two_column_resume_pdf_real():
+    """Regression test for the user-supplied student résumé with two columns."""
+    from pathlib import Path
+    import fitz
+    root=Path(__file__).resolve().parents[1]
+    fixture=root/'fixtures'/'two_column_student_resume.pdf'
+    with fitz.open(fixture) as doc:
+        blocks=[]
+        for page_no,page in enumerate(doc,1):
+            for block in page.get_text('dict')['blocks']:
+                for line in block.get('lines',[]):
+                    txt=''.join(span['text'] for span in line['spans']).strip()
+                    if txt:
+                        blocks.append({'BlockType':'LINE','Page':page_no,'Text':txt,
+                            'Geometry':{'BoundingBox':{'Top':line['bbox'][1]/page.rect.height,'Left':line['bbox'][0]/page.rect.width}}})
+        result=parse_resume('\n'.join(page.get_text() for page in doc),blocks)
+    assert result['detected_name']=='JANEE ZEDA'
+    assert 'Mathematics' in result['education']
+    assert 'University of Alaska' in result['education']
+    assert {'SQL','Python','Pandas','scikit-learn','Matplotlib','Tableau'}<=set(result['skills'])
+    assert 'Fantasy Football Modeling' in result['projects']
+    assert 'Movie Recommendation Engine' in result['projects']
+    assert 'Market Analysis' in result['projects']
+    assert 'Basketball Intramural Team' not in result['projects']
+    assert 'Basketball Intramural Team' in result['leadership']
+    assert result['experience']==''
+    assert 'community outreach' in result['volunteer_experience']
+    assert result['processing_status']=='completed'

@@ -196,8 +196,9 @@ resource "aws_iam_role_policy_attachment" "ssm" {
 resource "aws_iam_role_policy" "app" {
   role = aws_iam_role.ec2.id
   policy = jsonencode({Version="2012-10-17",Statement=[
-    {Effect="Allow",Action=["s3:PutObject","s3:GetObject"],Resource=["${aws_s3_bucket.resumes.arn}/resumes/*","${aws_s3_bucket.releases.arn}/*"]},
+    {Effect="Allow",Action=["s3:PutObject","s3:GetObject"],Resource=["${aws_s3_bucket.resumes.arn}/resumes/*","${aws_s3_bucket.resumes.arn}/cover-letters/*","${aws_s3_bucket.releases.arn}/*"]},
     {Effect="Allow",Action=["dynamodb:PutItem","dynamodb:GetItem","dynamodb:Scan","dynamodb:UpdateItem","dynamodb:DeleteItem"],Resource=[aws_dynamodb_table.applications.arn,aws_dynamodb_table.jobs.arn]},
+    {Effect="Allow",Action=["textract:DetectDocumentText"],Resource="*"},
     {Effect="Allow",Action=["cognito-idp:AdminCreateUser","cognito-idp:AdminAddUserToGroup","cognito-idp:ListUsersInGroup","cognito-idp:AdminListGroupsForUser","cognito-idp:AdminDisableUser","cognito-idp:AdminEnableUser"],Resource=aws_cognito_user_pool.users.arn}
   ]})
 }
@@ -218,7 +219,7 @@ resource "aws_iam_role_policy" "lambda" {
   role = aws_iam_role.lambda.id
   policy = jsonencode({Version="2012-10-17",Statement=[
     {Effect="Allow",Action=["s3:GetObject"],Resource=["${aws_s3_bucket.resumes.arn}/resumes/*"]},
-    {Effect="Allow",Action=["dynamodb:UpdateItem"],Resource=[aws_dynamodb_table.applications.arn]},
+    {Effect="Allow",Action=["dynamodb:GetItem","dynamodb:UpdateItem"],Resource=[aws_dynamodb_table.applications.arn]},
     {Effect="Allow",Action=["textract:StartDocumentTextDetection","textract:GetDocumentTextDetection","comprehend:DetectEntities","comprehend:DetectKeyPhrases"],Resource="*"}
   ]})
 }

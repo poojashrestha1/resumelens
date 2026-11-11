@@ -4,6 +4,7 @@ Textract is the OCR layer, not a structured CV parser. Incomplete extraction is
 marked review_required rather than publishing invented values.
 """
 import json, os, re, time, urllib.parse
+from decimal import Decimal
 import boto3
 from resume_parser import parse_resume
 
@@ -25,7 +26,7 @@ def detect_text(bucket,key):
             raise RuntimeError('Textract returned '+status)
         time.sleep(4)
     else:raise TimeoutError('Textract processing exceeded 240 seconds')
-    lines=[]; token=None
+    lines=[]; blocks=[]; token=None
     while True:
         kwargs={'JobId':job_id}
         if token:kwargs['NextToken']=token
@@ -33,9 +34,10 @@ def detect_text(bucket,key):
         for block in result.get('Blocks',[]):
             if block.get('BlockType')=='LINE' and block.get('Text'):
                 lines.append((block.get('Page',1),block['Text']))
+                blocks.append(block)
         token=result.get('NextToken')
         if not token:break
-    return '\n'.join(t for _,t in lines)
+    return '\n'.join(t for _,t in lines), blocks
 
 
 def enrich(text):
@@ -43,7 +45,7 @@ def enrich(text):
     try:
         # Comprehend accepts <= 5 KB per request, UTF-8 boundaries matter.
         sample=text.encode('utf-8')[:4500].decode('utf-8','ignore')
-        return [{'text':e['Text'],'type':e['Type'],'score':round(float(e['Score']),3)}
+        return [{'text':e['Text'],'type':e['Type'],'score':Decimal(str(round(float(e['Score']),3)))}
                 for e in comprehend.detect_entities(Text=sample,LanguageCode='en').get('Entities',[])
                 if e.get('Score',0)>=0.85][:40]
     except Exception:
@@ -58,12 +60,19 @@ def handler(event,context):
         app_id=key.rsplit('/',1)[-1][:-4]
         started=time.monotonic()
         try:
-            text=detect_text(bucket,key)
+            text,blocks=detect_text(bucket,key)
             if len(text.strip())<30:raise ValueError('Textract returned insufficient text')
-            parsed=parse_resume(text)
+            parsed=parse_resume(text,blocks=blocks)
             parsed['comprehend_entities']=enrich(text)
             parsed['processing_duration_ms']=int((time.monotonic()-started)*1000)
             parsed['processing_error']=''
+            current=table.get_item(Key={'id':app_id}).get('Item')
+            if not current:continue
+            if current.get('applicant_verified'):
+                # Never overwrite an applicant's corrections after submission.
+                parsed={k:v for k,v in parsed.items() if k in
+                    ('resume_text','processing_duration_ms','processing_error','comprehend_entities')}
+                parsed['processing_status']='applicant_verified'
             values={':'+k:v for k,v in parsed.items()}
             names={'#'+k:k for k in parsed}
             expression='SET '+', '.join('#'+k+'=:'+k for k in parsed)

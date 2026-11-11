@@ -20,7 +20,7 @@ def test_hr_can_manage_jobs_but_cannot_apply():
         assert client.post('/api/staff/jobs',headers=applicant,json={
             'title':'Not Allowed','department':'Engineering','location':'Remote','description':'No access'}).status_code==403
         assert client.post('/api/applications',headers=hr,data={
-            'job_id':job['id'],'name':'Recruiter','phone':'5551234567'},files={'resume':('resume.pdf',b'%PDF-1.4\n','application/pdf')}).status_code==403
+            'job_id':job['id'],'details':'{"name":"Recruiter","email":"hr@demo.example.com","phone":"5551234567","address":"Example City"}'},files={'resume':('resume.pdf',b'%PDF-1.4\n','application/pdf')}).status_code==403
         assert client.delete('/api/staff/jobs/'+job['id'],headers=hr).status_code==200
         assert all(j['id']!=job['id'] for j in client.get('/api/jobs').json())
         assert any(j['id']==job['id'] for j in client.get('/api/staff/jobs',headers=hr).json())

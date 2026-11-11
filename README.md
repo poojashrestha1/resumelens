@@ -1,10 +1,10 @@
-# CareerFlow v2 — AWS recruitment portal (React + FastAPI + Terraform)
+# CareerFlow v5 — ATS + editable application form (v4 extraction fixes included)
 
 > A **university lab/demo**, not a production ATS. Contains personal résumé data: use fictitious/synthetic candidates while testing. Infrastructure creation has **not** been exercised against a live AWS account in this deliverable; review `terraform plan` before deploying.
 
 ## What is included
 
-- Public React careers site, job listing, and **applicant-only** PDF application form.
+- Public React careers site, job listing, and **applicant-only** editable application form with optional PDF résumé autofill.
 - Cognito applicant **sign-up**, email confirmation, sign-in, and **My Applications** history/status.
 - Protected **HR dashboard**: candidates, extracted education, résumé PDF, review statuses.
 - Protected **Admin dashboard**: recruit HR by email, enable/disable HR, post jobs.
@@ -209,3 +209,61 @@ cd backend && python -m pytest test_smoke.py test_roles.py -q
 Replace the source files in your cloned GitHub project with the files from this ZIP, then commit and push to `main`. Run the existing GitHub Actions **AWS Lab Deploy or Destroy** workflow with `action=deploy` (do not select `destroy`). Terraform updates the Lambda ZIP and the application package is redeployed to EC2. Because the Lambda archive now contains the parser as well as the handler, changing these source files updates the Lambda code on the next Terraform apply. Verify the GitHub Action plan carefully for unwanted resource replacement, especially EC2 and Cognito. Never run destroy to update code: destroy deletes user pools and data.
 
 Use only sample résumés until the application has HTTPS and is evaluated for privacy/security. S3 documents may contain personal data; avoid exposing raw extracted text beyond authorized staff.
+
+## v4 extraction update — two-column resumes
+
+- `aws/resume_parser.py` now accepts Textract `LINE` blocks with bounding boxes, preserving reading order separately for columns. Falls back to plain text when layout information is unavailable.
+- `aws/lambda_function.py` passes Textract blocks into the parser and still retains Comprehend enrichment.
+- `backend/app/main.py` builds equivalent geometry from PyMuPDF in local mode.
+- Projects and leadership are captured separately from paid employment; outreach can be shown for HR review without assuming the activity was a formal volunteer job.
+- `fixtures/two_column_student_resume.pdf` is a regression sample, and `aws/test_resume_parser.py` includes its extraction assertions.
+- Run `python -m pytest -q aws/test_resume_parser.py backend/test_roles.py backend/test_smoke.py` locally.
+- For deployment, copy the updated source into the original repository and run the existing GitHub Actions deploy workflow. Avoid deploying Terraform changes blindly; check the plan first.
+- Live AWS Textract accuracy has not been validated by these local tests. Compare actual Lambda output and PDF before claiming end-to-end success.
+- Previously submitted resumes are not automatically reprocessed; submit a fresh sample PDF after deployment.
+
+
+## v5 update — apply once over your working v2 repository
+
+The full ZIP bundles v3 role/job-management features, the v4 column-aware PDF résumé parser,
+and the v5 applicant form. It is NOT necessary to deploy v3 or v4 first.
+
+### Applicant workflow
+1. Sign in as Applicant; select a job and choose **Apply**.
+2. Optionally upload a résumé (PDF up to 5MB). The backend first uses PyMuPDF; if the file
+   has no readable text and is a single page in AWS mode, it tries synchronous Textract.
+   Scanned multipage PDFs require manual entry during preview. Never promise a 1–2 second SLA.
+3. Review/edit full name, email, address, contact number, skills, education, work experience,
+   projects, volunteering, leadership, and cover letter (text or optional PDF attachment).
+4. Submit. Confirmed form values are saved separately and Lambda never overwrites them.
+5. Uploaded PDFs trigger the existing S3→Lambda→Textract→Comprehend workflow, which adds
+   raw OCR text for HR keyword search and processing metrics. OCR may continue after submission.
+
+### Installation
+Copy the contents of this ZIP into the root of the original repository, **not the folder itself**.
+Preserve `.git`, local `.env` files, and any customized `scripts/install_on_ec2.sh` file if you
+have changes beyond the bundled health-check version. Do not copy local SQLite test data.
+
+Changes of particular importance:
+- `backend/app/main.py`: `/api/applications/prefill` and editable submitted JSON in multipart form
+- `frontend/src/main.jsx`, `frontend/src/style.css`: expanded application and dashboards
+- `aws/resume_parser.py`, `aws/lambda_function.py`: column-aware parsing, verified-data protection
+- `terraform/main.tf`: EC2 `textract:DetectDocumentText`, S3 cover-letter prefix, Lambda `dynamodb:GetItem`
+- `backend/test_application_v5.py`, `aws/test_resume_parser.py`, `fixtures/`: regression tests
+- `.github/workflows/aws-lab.yml`: packages shared Python parser in EC2 release
+
+Run `PYTHONPATH=backend pytest -q aws/test_resume_parser.py backend/test_roles.py backend/test_smoke.py backend/test_application_v5.py`
+and `cd frontend && npm install && npm run build`. The latter was not run in this packaging
+session because npm dependencies were not available offline.
+
+**Review Terraform plan before applying.** Avoid destroy; that can delete users/jobs/applications.
+Use only test PDFs and HTTPS or localhost SSM tunneling until HTTPS is configured.
+
+### Limitations
+- For text-based PDFs, fast preview is a *target*, not a guaranteed 2-second result.
+- For scanned single-page PDFs in AWS, synchronous Textract response time is variable;
+  for scanned multi-page preview, the form remains manually editable.
+- There is no full DOCX support in this package.
+- Keyword searching via DynamoDB Scan is intended only for a small teaching dataset.
+- The résumé parser is heuristic and requires applicant correction and human HR review.
+- AWS live OCR processing and the frontend production build still need verification.

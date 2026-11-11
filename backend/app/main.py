@@ -1,4 +1,4 @@
-import io, os, re, time, uuid, hmac
+import io, os, re, time, uuid, hmac, json
 from datetime import datetime,timezone
 from pathlib import Path
 from typing import Annotated
@@ -161,43 +161,118 @@ def enable_recruiter(username:str,_=Depends(admin)):
     client().admin_enable_user(UserPoolId=settings.cognito_pool_id,Username=username)
     return {'message':'Recruiter enabled'}
 
-def education(text):
-    result=[re.sub(r'\s+',' ',x).strip()[:180] for x in text.splitlines() if re.search(r'\b(bachelor|master|university|college|degree|education|btech|mtech|phd)\b',x,re.I)]
-    return ' · '.join(result[:3]) or 'Needs manual review'
+# Preview never creates an application or stores personal details.
+# Direct text extraction is the fast path; Textract is reserved for scanned single-page PDFs.
+def resume_parse(pdf_bytes):
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'aws'))
+    from resume_parser import parse_resume
+    started=time.monotonic()
+    try:
+        with fitz.open(stream=pdf_bytes,filetype='pdf') as doc:
+            if doc.needs_pass or not 1<=len(doc)<=25:raise ValueError('Password protected or invalid page count')
+            raw=[]; blocks=[]
+            for page_no,page in enumerate(doc,1):
+                raw.append(page.get_text())
+                for block in page.get_text('dict')['blocks']:
+                    for line in block.get('lines',[]):
+                        value=''.join(span['text'] for span in line['spans']).strip()
+                        if not value:continue
+                        box=line['bbox'];w=page.rect.width;h=page.rect.height
+                        blocks.append({'BlockType':'LINE','Page':page_no,'Text':value,'Geometry':{'BoundingBox':{'Left':box[0]/w,'Top':box[1]/h}}})
+            text='\n'.join(raw)
+            if len(text.strip())>=40:
+                result=parse_resume(text,blocks=blocks)
+                result.update(extraction_method='direct_pdf',extraction_duration_ms=int((time.monotonic()-started)*1000))
+                return result
+            page_count=len(doc)
+    except Exception as exc:raise HTTPException(415,'Unreadable or password-protected PDF') from exc
+    if page_count==1 and settings.app_mode=='aws':
+        try:
+            response=boto3.client('textract',region_name=settings.aws_region).detect_document_text(Document={'Bytes':pdf_bytes})
+            blocks=response.get('Blocks',[])
+            text='\n'.join(x['Text'] for x in blocks if x.get('BlockType')=='LINE' and x.get('Text'))
+            if text.strip():
+                result=parse_resume(text,blocks=blocks)
+                result.update(extraction_method='textract_sync',extraction_duration_ms=int((time.monotonic()-started)*1000))
+                return result
+        except ClientError:
+            pass
+    return {'detected_name':'','skills':[],'education':'','experience':'','volunteer_experience':'',
+            'projects':'','leadership':'','processing_warning':'No readable text detected. Enter information manually; scanned multi-page files require a longer OCR process.',
+            'extraction_method':'manual_required','extraction_duration_ms':int((time.monotonic()-started)*1000)}
 
-@app.post('/api/applications',status_code=201)
-async def submit(job_id:Annotated[str,Form()],name:Annotated[str,Form()],phone:Annotated[str,Form()],resume:Annotated[UploadFile,File()],user=Depends(verified_user)):
-    if user['role']!='applicant':raise HTTPException(403,'Applicant account required')
-    job=storage.get('jobs',job_id)
-    if not job or not job.get('active',True):raise HTTPException(404,'Job not available')
-    if not 2<=len(name.strip())<=120 or len(phone)>40:raise HTTPException(422,'Invalid application details')
-    data=await resume.read(MAX_PDF+1)
-    if len(data)>MAX_PDF:raise HTTPException(413,'PDF must be at most 5 MB')
+async def read_pdf(upload):
+    if upload is None:return None
+    data=await upload.read(MAX_PDF+1)
+    if not data or len(data)>MAX_PDF:raise HTTPException(413,'PDF must be at most 5 MB')
     if not data.startswith(b'%PDF-'):raise HTTPException(415,'PDF required')
     try:
         with fitz.open(stream=data,filetype='pdf') as doc:
-            if doc.needs_pass or not 1<=len(doc)<=25:raise ValueError('Invalid page count or encrypted file')
-            text='\n'.join(page.get_text() for page in doc) if settings.app_mode=='local' else ''
+            if doc.needs_pass or not 1<=len(doc)<=25:raise ValueError('Invalid PDF')
     except Exception:raise HTTPException(415,'Unreadable or password-protected PDF')
-    user_sub=user['sub'];app_id=str(uuid.uuid4());key=f'resumes/{app_id}.pdf'
-    # Store applicant subject, not email supplied by browser.
-    record={'id':app_id,'applicant_sub':user_sub,'name':name.strip(),'phone':phone.strip(),'position':job['title'],'job_id':job_id,'education':education(text) if settings.app_mode=='local' else 'Pending extraction','skills':[],'experience':'','volunteer_experience':'','resume_text':'','processing_warning':'','section_evidence':[],'resume_key':key,'processing_status':'processing' if settings.app_mode=='aws' else 'review_required','review_status':'applied','created_at':now(),'processing_error':''}
-    if settings.app_mode=='local' and text.strip():
-        # Shared parser matches production Lambda behavior in offline demonstrations.
-        import sys
-        sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'aws'))
-        from resume_parser import parse_resume
-        record.update(parse_resume(text))
+    return data
+
+@app.post('/api/applications/prefill')
+async def prefill(resume:UploadFile=File(...),user=Depends(verified_user)):
+    if user['role']!='applicant':raise HTTPException(403,'Applicant account required')
+    data=await read_pdf(resume)
+    parsed=resume_parse(data)
+    # Never send full résumé OCR text through this preview response.
+    parsed.pop('resume_text',None)
+    return parsed
+
+class ApplicationDetails(BaseModel):
+    name:str=Field(min_length=2,max_length=120)
+    email:EmailStr
+    phone:str=Field(min_length=3,max_length=40)
+    address:str=Field(min_length=3,max_length=300)
+    skills:list[str]=Field(default_factory=list,max_length=100)
+    education:str=Field(default='',max_length=5000)
+    experience:str=Field(default='',max_length=8000)
+    volunteer_experience:str=Field(default='',max_length=5000)
+    projects:str=Field(default='',max_length=5000)
+    leadership:str=Field(default='',max_length=5000)
+    cover_letter:str=Field(default='',max_length=10000)
+
+@app.post('/api/applications',status_code=201)
+async def submit(job_id:Annotated[str,Form()],details:Annotated[str,Form()],resume:UploadFile|None=File(None),cover_file:UploadFile|None=File(None),user=Depends(verified_user)):
+    if user['role']!='applicant':raise HTTPException(403,'Applicant account required')
+    job=storage.get('jobs',job_id)
+    if not job or not job.get('active',True):raise HTTPException(404,'Job not available')
+    try:fields=ApplicationDetails.model_validate_json(details).model_dump()
+    except Exception:raise HTTPException(422,'Invalid application fields')
+    data=await read_pdf(resume)
+    cover_data=await read_pdf(cover_file)
+    if not data and not fields['education'] and not fields['experience'] and not fields['skills']:
+        raise HTTPException(422,'Enter qualifications or upload a résumé')
+    app_id=str(uuid.uuid4());key=f'resumes/{app_id}.pdf' if data else ''
+    cover_key=f'cover-letters/{app_id}.pdf' if cover_data else ''
+    record={'id':app_id,'applicant_sub':user['sub'],**fields,
+            'position':job['title'],'job_id':job_id,'resume_key':key,'cover_letter_key':cover_key,
+            'resume_text':'','processing_status':'processing' if data and settings.app_mode=='aws' else 'applicant_verified',
+            'applicant_verified':True,'review_status':'applied','created_at':now(),
+            'processing_error':'','processing_warning':'Applicant-reviewed fields are authoritative',
+            'section_evidence':[]}
+    # Persist record before S3 event; Lambda may only fill OCR/search metadata.
     storage.put('applications',record)
     try:
         if settings.app_mode=='aws':
-            boto3.client('s3',region_name=settings.aws_region).put_object(Bucket=settings.s3_bucket,Key=key,Body=data,ContentType='application/pdf',ServerSideEncryption='AES256')
+            s3=boto3.client('s3',region_name=settings.aws_region)
+            if data:s3.put_object(Bucket=settings.s3_bucket,Key=key,Body=data,ContentType='application/pdf',ServerSideEncryption='AES256')
+            if cover_data:s3.put_object(Bucket=settings.s3_bucket,Key=cover_key,Body=cover_data,ContentType='application/pdf',ServerSideEncryption='AES256')
         else:
-            folder=storage.DATA/'resumes';folder.mkdir(exist_ok=True);(folder/f'{app_id}.pdf').write_bytes(data)
+            folder=storage.DATA/'resumes';folder.mkdir(exist_ok=True)
+            if data:(folder/f'{app_id}.pdf').write_bytes(data)
+            if cover_data:(folder/f'{app_id}-cover.pdf').write_bytes(cover_data)
+            if data:
+                extracted=resume_parse(data)
+                storage.patch('applications',app_id,{'resume_text':extracted.get('resume_text',''),
+                              'processing_status':'applicant_verified','extraction_method':extracted.get('extraction_method','')})
     except Exception:
         storage.patch('applications',app_id,{'processing_status':'upload_failed'})
-        raise HTTPException(502,'Resume upload failed')
-    return {'id':app_id,'message':'Application submitted'}
+        raise HTTPException(502,'Application document upload failed')
+    return {'id':app_id,'message':'Application submitted; applicant-reviewed information saved'}
 
 @app.get('/api/me/applications')
 def my_applications(user=Depends(verified_user)):
@@ -213,7 +288,7 @@ def staff_applications(q:str='',job_id:str='',_ = Depends(staff)):
     for item in storage.all_items('applications'):
         if job_id and item.get('job_id')!=job_id:continue
         if needle:
-            searchable=' '.join(str(item.get(k,'')) for k in ('name','position','skills','education','experience','volunteer_experience','resume_text'))
+            searchable=' '.join(str(item.get(k,'')) for k in ('name','position','skills','education','experience','volunteer_experience','projects','leadership','resume_text'))
             if needle not in searchable.casefold():continue
         results.append(item)
     return sorted(results,key=lambda x:x.get('created_at',''),reverse=True)[:250]
@@ -224,7 +299,7 @@ def aws_resources(_=Depends(staff)):
     # Configuration and observed application states, not a live AWS Health assertion.
     records=storage.all_items('applications')
     state_counts={status:sum(a.get('processing_status')==status for a in records)
-                  for status in ('processing','completed','review_required','upload_failed')}
+                  for status in ('processing','completed','review_required','applicant_verified','upload_failed')}
     return {'region':settings.aws_region,'app_mode':settings.app_mode,
             'processing_counts':state_counts,
             'services':[
@@ -251,6 +326,7 @@ def resume(application_id:str,user=Depends(verified_user)):
     record=storage.get('applications',application_id)
     if not record:raise HTTPException(404,'Not found')
     if user['role'] not in ('hr','admin') and record['applicant_sub']!=user['sub']:raise HTTPException(403,'Not allowed')
+    if not record.get('resume_key'):raise HTTPException(404,'No résumé was uploaded')
     if settings.app_mode=='aws':
         try:
             obj=boto3.client('s3',region_name=settings.aws_region).get_object(Bucket=settings.s3_bucket,Key=record['resume_key'])
@@ -259,3 +335,18 @@ def resume(application_id:str,user=Depends(verified_user)):
     path=storage.DATA/'resumes'/f'{application_id}.pdf'
     if not path.exists():raise HTTPException(404,'Resume missing')
     return StreamingResponse(io.BytesIO(path.read_bytes()),media_type='application/pdf',headers={'Content-Disposition':'inline; filename="resume.pdf"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+@app.get('/api/applications/{application_id}/cover-letter')
+def cover_letter_file(application_id:str,user=Depends(verified_user)):
+    record=storage.get('applications',application_id)
+    if not record:raise HTTPException(404,'Not found')
+    if user['role'] not in ('hr','admin') and record['applicant_sub']!=user['sub']:raise HTTPException(403,'Not allowed')
+    if not record.get('cover_letter_key'):raise HTTPException(404,'No cover letter file')
+    if settings.app_mode=='aws':
+        try:
+            obj=boto3.client('s3',region_name=settings.aws_region).get_object(Bucket=settings.s3_bucket,Key=record['cover_letter_key'])
+            return StreamingResponse(obj['Body'].iter_chunks(chunk_size=65536),media_type='application/pdf',headers={'Content-Disposition':'inline; filename="cover-letter.pdf"','Cache-Control':'no-store'})
+        except ClientError:raise HTTPException(404,'Cover letter missing')
+    path=storage.DATA/'resumes'/f'{application_id}-cover.pdf'
+    if not path.exists():raise HTTPException(404,'Cover letter missing')
+    return StreamingResponse(io.BytesIO(path.read_bytes()),media_type='application/pdf')
