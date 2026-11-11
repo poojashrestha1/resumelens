@@ -12,7 +12,7 @@ from .config import settings
 from . import storage
 from .auth import client, verified_user, staff, admin
 
-app=FastAPI(title='CareerFlow API',version='2.0')
+app=FastAPI(title='ResumeLens API',version='2.0')
 app.add_middleware(CORSMiddleware,allow_origins=[x.strip() for x in settings.cors_origins.split(',')],allow_methods=['GET','POST','PATCH','DELETE'],allow_headers=['Authorization','Content-Type'])
 MAX_PDF=5*1024*1024
 

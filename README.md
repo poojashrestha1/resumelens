@@ -1,4 +1,4 @@
-# CareerFlow v5 — ATS + editable application form (v4 extraction fixes included)
+# ResumeLens — ATS + editable application form (v4 extraction fixes included)
 
 > A **university lab/demo**, not a production ATS. Contains personal résumé data: use fictitious/synthetic candidates while testing. Infrastructure creation has **not** been exercised against a live AWS account in this deliverable; review `terraform plan` before deploying.
 
@@ -49,7 +49,7 @@ Upload the entire directory to a **private GitHub repository**. Set the default 
 
 ```bash
 python3 -m pip install boto3
-python3 scripts/bootstrap_github.py --repo YOUR_GITHUB_USERNAME/careerflow --region us-east-1
+python3 scripts/bootstrap_github.py --repo YOUR_GITHUB_USERNAME/cloudpto --region us-east-1
 ```
 
 The bootstrap creates persistent resources: an S3 Terraform state bucket (versioned, encrypted, private), a branch-scoped GitHub OIDC provider, and an IAM role. It prints the values to configure in **GitHub > Settings > Secrets and variables > Actions > Secrets**:
