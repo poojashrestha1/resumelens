@@ -28,6 +28,9 @@ SKILL_PATTERNS = {
     'Excel':r'\bExcel\b', 'Google Sheets':r'\bGoogle\s+Sheets\b',
     'Matplotlib':r'\bMatplotlib\b', 'Tableau':r'\bTableau\b',
     'Regression Modeling':r'\b(?:linear|logistic)\s+regressions?\b',
+    'Adobe Creative Suite':r'\bAdobe Creative Suite\b', 'Figma':r'\bFigma\b',
+    'Procreate':r'\bProcreate\b', 'Google Fonts':r'\bGoogle Fonts\b',
+    'Coolors':r'\bCoolors\b', 'Canva':r'\bCanva\b',
 }
 DEGREE_RE = re.compile(r'\b(?:bachelor|master|b\.?s\.?|m\.?s\.?|b\.?tech|m\.?tech|ph\.?d\.?|doctorate|diploma|associate|university|college|institute)\b', re.I)
 OUTREACH_RE = re.compile(r'\b(?:community outreach|volunteer(?:ed|ing)?|pro bono|charity|nonprofit|community service|mentored|tutored)\b', re.I)
@@ -47,17 +50,27 @@ def _lines_from_blocks(blocks):
     output=[]
     for page in sorted(by_page):
         items=sorted(by_page[page],key=lambda row:(row[0],row[1]))
-        heading_positions=[(y,x) for y,x,t in items if SECTION_RE.match(t) and len(t)<70]
-        left_heads=[(y,x) for y,x in heading_positions if x<.56]
-        right_heads=[(y,x) for y,x in heading_positions if x>=.56]
-        if left_heads and right_heads:
-            start=min(y for y,x in heading_positions)
+        # Infer the gutter from heading positions, rather than assuming that
+        # the right column starts past the middle of the page. Many resumes
+        # have a narrow sidebar and a main column starting around x=.35.
+        headings=sorted((x,y) for y,x,t in items if SECTION_RE.fullmatch(t) and len(t)<70)
+        xs=sorted(set(round(x,3) for x,y in headings))
+        gaps=[(xs[i+1]-xs[i],i) for i in range(len(xs)-1)]
+        if gaps:
+            gap,index=max(gaps)
+            split=(xs[index]+xs[index+1])/2
+            left_heads=[(x,y) for x,y in headings if x<split]
+            right_heads=[(x,y) for x,y in headings if x>=split]
+        else:
+            gap=0;left_heads=[];right_heads=[]
+        # Only treat a page as two columns if each side has an independently
+        # identified section heading and a meaningful horizontal gap.
+        if gap>=.08 and left_heads and right_heads:
+            start=min(y for x,y in headings)
             header=[r for r in items if r[0]<start-.008]
             body=[r for r in items if r[0]>=start-.008]
-            # Center split .56 keeps wide lines in left column even when text
-            # stretches past the halfway point. Left is the beginning coordinate.
-            left=sorted((r for r in body if r[1]<.56),key=lambda r:(r[0],r[1]))
-            right=sorted((r for r in body if r[1]>=.56),key=lambda r:(r[0],r[1]))
+            left=sorted((r for r in body if r[1]<split),key=lambda r:(r[0],r[1]))
+            right=sorted((r for r in body if r[1]>=split),key=lambda r:(r[0],r[1]))
             output.extend(r[2] for r in header+left+right)
         else:
             output.extend(r[2] for r in items)
