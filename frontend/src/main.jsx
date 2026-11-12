@@ -365,7 +365,6 @@ function App() {
   const [editingJob, setEditingJob] = useState(null);
   const [applications, setApplications] = useState([]);
   const [recruiters, setRecruiters] = useState([]);
-  const [awsInfo, setAwsInfo] = useState(null);
   const [chosen, setChosen] = useState(null);
   const [tab, setTab] = useState("applications");
   const [search, setSearch] = useState("");
@@ -414,7 +413,6 @@ function App() {
       setApplications(data);
       if (user.role !== "applicant") {
         setStaffJobs(await call("/api/staff/jobs"));
-        setAwsInfo(await call("/api/staff/aws-resources"));
       }
       if (user.role === "admin")
         setRecruiters(await call("/api/admin/recruiters"));
@@ -810,15 +808,6 @@ function App() {
                 Manage positions
               </button>
             )}
-            {isStaff && (
-              <button
-                className={tab === "aws" ? "selected" : ""}
-                onClick={() => setTab("aws")}
-              >
-                <ShieldCheck size={18} />
-                AWS Processing
-              </button>
-            )}
             <button onClick={() => go("/")}>
               <ChevronLeft size={18} />
               Back to careers
@@ -833,8 +822,6 @@ function App() {
                   : "My applications"
                 : tab === "recruiters"
                   ? "Recruiter accounts"
-                  : tab === "aws"
-                    ? "AWS processing resources"
                     : "Job management"}
             </h1>
             <p className="muted">
@@ -842,8 +829,6 @@ function App() {
                 ? "Review submitted applications and their progress."
                 : tab === "recruiters"
                   ? "Invite and manage your HR team."
-                  : tab === "aws"
-                    ? "Service roles and observed résumé processing results."
                     : "Manage open and archived positions."}
             </p>
             {tab === "applications" ? (
@@ -1110,33 +1095,6 @@ function App() {
                   </div>
                 </div>
               </>
-            ) : tab === "aws" && isStaff ? (
-              <div className="panel">
-                <h2>AWS integration</h2>
-                <p className="muted">
-                  Service responsibilities are configuration information, not
-                  independent live AWS health checks.
-                </p>
-                <div className="stats">
-                  {Object.entries(awsInfo?.processing_counts || {}).map(
-                    ([k, v]) => (
-                      <div key={k}>
-                        <small>{k.replaceAll("_", " ")}</small>
-                        <strong>{v}</strong>
-                      </div>
-                    ),
-                  )}
-                </div>
-                {(awsInfo?.services || []).map((r) => (
-                  <div className="jobrow" key={r.name}>
-                    <div>
-                      <strong>{r.name}</strong>
-                      <small>{r.purpose}</small>
-                      {r.resource && <small>Resource: {r.resource}</small>}
-                    </div>
-                  </div>
-                ))}
-              </div>
             ) : tab === "jobs" && isStaff ? (
               <>
                 <form
