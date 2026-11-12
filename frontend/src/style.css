@@ -5,3 +5,28 @@
 
 /* CareerFlow v5 application form */
 .application-modal{width:830px;max-width:96vw;max-height:92vh;padding:32px 38px}.application-modal h3{font-size:17px;margin:25px 0 15px}.application-form textarea{width:100%;min-height:85px;resize:vertical;font:inherit;padding:12px;border:1px solid #dbe3ee;border-radius:9px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}.autofill-box{background:#f2f6ff;border:1px solid #dbe6fc;padding:17px;border-radius:12px;margin:22px 0}.autofill-box label{margin:0 0 8px}.autofill-box p{font-size:13px;margin:4px 0 6px}.verified-note{color:#2e8073;font-weight:600}.application-form label{width:100%}@media(max-width:700px){.form-grid{grid-template-columns:1fr}.application-modal{padding:28px 18px}}
+
+/* Resume Lens staff applications table */
+.staff-filters{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin:0 0 16px}
+.staff-filters label{margin:0;min-width:155px}
+.staff-filters select{padding:9px 11px}
+.staff-filters .secondary{margin-bottom:1px}
+.staff-result-count{font-size:12px;color:#76859b;margin-left:auto;padding-bottom:10px}
+.staff-table-scroll{max-width:100%;border:1px solid #e7ecf4;border-radius:9px}
+.staff-table{table-layout:fixed;min-width:100%;width:max-content}
+.staff-table th{position:relative;white-space:nowrap;overflow:visible;padding-right:18px;background:#f9fbff}
+.staff-resize-handle{position:absolute;right:-4px;top:0;bottom:0;width:9px;cursor:col-resize;z-index:2;touch-action:none}
+.staff-resize-handle::after{content:"";position:absolute;top:20%;bottom:20%;left:4px;border-left:1px solid #cbd5e1}
+.staff-resize-handle:hover::after{border-left:3px solid #3269e8}
+.staff-table td{height:70px;max-width:0;padding:9px 10px;vertical-align:middle}
+.staff-table .staff-cell{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.staff-cell-content{width:100%;max-height:37px;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line;line-height:1.5}
+.staff-cell-content:not(.expanded){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
+.staff-cell-content.expanded{max-height:none;display:block}
+.staff-cell-content small{overflow-wrap:anywhere}
+.staff-cell-content select{max-width:100%;padding:7px}
+.staff-cell-content .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.staff-table .staff-row-expanded td{height:auto;vertical-align:top}
+.staff-expand{font-size:10px;color:#3269e8;font-weight:700;padding:0;white-space:nowrap}
+.staff-expand:hover{text-decoration:underline}
+.staff-table-hint{font-size:11px;color:#8794a6;margin:9px 0 0}
