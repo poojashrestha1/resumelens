@@ -300,6 +300,18 @@ function StaffApplicationsTable({ applications, openDocument, openPDF, setReview
     const delta=(new Date(a.created_at||0).getTime()||0)-(new Date(b.created_at||0).getTime()||0);
     return sort==="oldest"?delta:-delta;
   }),[applications,position,review,sort]);
+  // Only show expansion controls for text that exceeds the column's preview limit.
+  const previewLimits = {contact:80, skills:65, education:100, experience:120,
+    volunteer_experience:120, projects:120, leadership:120, cover_letter:120};
+  const plainText = (value) => Array.isArray(value) ? value.join(", ") : String(value ?? "");
+  const cellText = (a,key) => {
+    if (key === "contact") return [a.email,a.phone,a.address].filter(Boolean).join(" ");
+    if (key === "processing") return "";
+    return plainText(a[key]);
+  };
+  const needsExpansion = (a,key) =>
+    Object.prototype.hasOwnProperty.call(previewLimits,key) &&
+    cellText(a,key).length > previewLimits[key];
   const field=(a,key)=>{
     switch(key) {
       case "name": return <><strong>{a.name}</strong><small>{a.created_at ? new Date(a.created_at).toLocaleDateString() : ""}</small></>;
@@ -331,7 +343,7 @@ function StaffApplicationsTable({ applications, openDocument, openPDF, setReview
         <colgroup>{STAFF_COLUMNS.map(([k])=><col key={k} style={{width:widths[k]}}/>)}</colgroup>
         <thead><tr>{STAFF_COLUMNS.map(([k,label,defaultWidth])=><th key={k} scope="col">{label}<span role="separator" aria-label={`Resize ${label} column`} aria-orientation="vertical" className="staff-resize-handle" onPointerDown={e=>{e.preventDefault();resizeRef.current={key:k,x:e.clientX,width:widths[k]};document.body.style.cursor="col-resize";document.body.style.userSelect="none";}} onDoubleClick={()=>setWidths(old=>({...old,[k]:defaultWidth}))}/></th>)}</tr></thead>
         <tbody>{rows.map(a=><tr key={a.id} className={expanded[a.id]?"staff-row-expanded":""}>{STAFF_COLUMNS.map(([k])=>{
-          const expandable=!["review","cv"].includes(k);
+          const expandable=needsExpansion(a,k);
           const open=!!expanded[a.id];
           return <td key={k}><div className="staff-cell"><div className={open?"staff-cell-content expanded":"staff-cell-content"}>{field(a,k)}</div>{expandable&&<button className="staff-expand" aria-label={`${open?"See less":"See more"} for ${a.name}`} onClick={()=>setExpanded(old=>({...old,[a.id]:!old[a.id]}))}>{open?"See less":"See more"}</button>}</div></td>;
         })}</tr>)}{rows.length===0&&<tr><td colSpan={STAFF_COLUMNS.length}>No applications match these filters.</td></tr>}</tbody>
