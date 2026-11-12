@@ -265,6 +265,82 @@ function ApplicantForm({ job, token, onClose, onSubmitted, onError }) {
     </div>
   );
 }
+
+const STAFF_COLUMNS = [
+  ["name","Name",160],["contact","Contact",210],["skills","Skills",200],
+  ["education","Education",220],["experience","Experience",220],
+  ["volunteer_experience","Volunteer experience",220],["projects","Projects",220],
+  ["leadership","Leadership",220],["cover_letter","Cover letter",220],
+  ["position","Position",170],["review","Review",165],["processing","Processing",215],["cv","CV",115]
+];
+function StaffApplicationsTable({ applications, openDocument, openPDF, setReview }) {
+  const [widths,setWidths] = useState(() => Object.fromEntries(STAFF_COLUMNS.map(([key,,width])=>[key,width])));
+  const [expanded,setExpanded] = useState({});
+  const [position,setPosition] = useState("all");
+  const [review,setReviewFilter] = useState("all");
+  const [sort,setSort] = useState("newest");
+  const resizeRef = React.useRef(null);
+  useEffect(() => {
+    const move = e => {
+      const d=resizeRef.current;
+      if (!d) return;
+      setWidths(old=>({...old,[d.key]:Math.max(90,Math.round(d.width+e.clientX-d.x))}));
+    };
+    const end=()=>{resizeRef.current=null;document.body.style.cursor="";document.body.style.userSelect="";};
+    window.addEventListener("pointermove",move);
+    window.addEventListener("pointerup",end);
+    window.addEventListener("pointercancel",end);
+    return ()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",end);window.removeEventListener("pointercancel",end);};
+  },[]);
+  const positions=useMemo(()=>[...new Set(applications.map(a=>a.position).filter(Boolean))].sort(),[applications]);
+  const rows=useMemo(()=>applications.filter(a=>
+    (position==="all"||a.position===position) &&
+    (review==="all"||a.review_status===review)
+  ).sort((a,b)=>{
+    const delta=(new Date(a.created_at||0).getTime()||0)-(new Date(b.created_at||0).getTime()||0);
+    return sort==="oldest"?delta:-delta;
+  }),[applications,position,review,sort]);
+  const field=(a,key)=>{
+    switch(key) {
+      case "name": return <><strong>{a.name}</strong><small>{a.created_at ? new Date(a.created_at).toLocaleDateString() : ""}</small></>;
+      case "contact": return <>{a.email||""}<small>{a.phone||""}</small><small>{a.address||""}</small></>;
+      case "skills": return Array.isArray(a.skills)?a.skills.join(", "):(a.skills||"Not listed");
+      case "education": return a.education||"Not detected";
+      case "experience": return a.experience||"Not listed";
+      case "volunteer_experience": return a.volunteer_experience||"Not listed";
+      case "projects": return a.projects||"Not listed";
+      case "leadership": return a.leadership||"Not listed";
+      case "cover_letter": return <>{a.cover_letter||"Not provided"}{a.cover_letter_key && <button className="link" onClick={()=>openDocument(a,"cover-letter")}>PDF</button>}</>;
+      case "position": return a.position||"—";
+      case "review": return <select aria-label={`Review status for ${a.name}`} value={a.review_status} onChange={e=>setReview(a,e.target.value)}>{Object.entries(statusLabels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>;
+      case "processing": return <><span className="tag" title={a.processing_warning||a.processing_error||""}>{a.processing_status?.replaceAll("_"," ")}</span><small>{a.processing_warning||a.processing_error||""}</small><small>{a.processing_duration_ms?`Processed in ${(a.processing_duration_ms/1000).toFixed(1)} s`:""}</small><small>{Array.isArray(a.section_evidence)?`Sections: ${a.section_evidence.join(", ")}`:""}</small></>;
+      case "cv": return a.resume_key?<button className="link" onClick={()=>openPDF(a)}><FileText size={16}/> PDF</button>:<span className="muted">Manual entry</span>;
+      default:return "";
+    }
+  };
+  return <>
+    <div className="staff-filters">
+      <label>Position<select value={position} onChange={e=>setPosition(e.target.value)}><option value="all">All positions</option>{positions.map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+      <label>Review status<select value={review} onChange={e=>setReviewFilter(e.target.value)}><option value="all">All statuses</option>{Object.entries(statusLabels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+      <label>Application date<select value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+      <button className="secondary" onClick={()=>{setPosition("all");setReviewFilter("all");setSort("newest");setExpanded({});setWidths(Object.fromEntries(STAFF_COLUMNS.map(([k,,w])=>[k,w])));}}>Reset view</button>
+      <span className="staff-result-count">{rows.length} application{rows.length!==1?"s":""}</span>
+    </div>
+    <div className="scroll staff-table-scroll">
+      <table className="staff-table" style={{width:STAFF_COLUMNS.reduce((n,[k])=>n+widths[k],0)}}>
+        <colgroup>{STAFF_COLUMNS.map(([k])=><col key={k} style={{width:widths[k]}}/>)}</colgroup>
+        <thead><tr>{STAFF_COLUMNS.map(([k,label,defaultWidth])=><th key={k} scope="col">{label}<span role="separator" aria-label={`Resize ${label} column`} aria-orientation="vertical" className="staff-resize-handle" onPointerDown={e=>{e.preventDefault();resizeRef.current={key:k,x:e.clientX,width:widths[k]};document.body.style.cursor="col-resize";document.body.style.userSelect="none";}} onDoubleClick={()=>setWidths(old=>({...old,[k]:defaultWidth}))}/></th>)}</tr></thead>
+        <tbody>{rows.map(a=><tr key={a.id} className={expanded[a.id]?"staff-row-expanded":""}>{STAFF_COLUMNS.map(([k])=>{
+          const expandable=!["review","cv"].includes(k);
+          const open=!!expanded[a.id];
+          return <td key={k}><div className="staff-cell"><div className={open?"staff-cell-content expanded":"staff-cell-content"}>{field(a,k)}</div>{expandable&&<button className="staff-expand" aria-label={`${open?"See less":"See more"} for ${a.name}`} onClick={()=>setExpanded(old=>({...old,[a.id]:!old[a.id]}))}>{open?"See less":"See more"}</button>}</div></td>;
+        })}</tr>)}{rows.length===0&&<tr><td colSpan={STAFF_COLUMNS.length}>No applications match these filters.</td></tr>}</tbody>
+      </table>
+    </div>
+    <p className="staff-table-hint">Drag a column header's right edge to resize. Double-click the edge to reset its width. See more expands one application row.</p>
+  </>;
+}
+
 function App() {
   const [token, setToken] = useState(sessionStorage.getItem("token") || "");
   const [role, setRole] = useState(sessionStorage.getItem("role") || "");
@@ -801,6 +877,9 @@ function App() {
                       onChange={(e) => setSearch(e.target.value)}
                     />
                   </div>
+                  {isStaff ? (
+                    <StaffApplicationsTable applications={visible} openDocument={openDocument} openPDF={openPDF} setReview={setReview} />
+                  ) : (
                   <div className="scroll">
                     <table>
                       <thead>
@@ -964,6 +1043,7 @@ function App() {
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               </>
             ) : tab === "recruiters" && role === "admin" ? (
