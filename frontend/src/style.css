@@ -30,3 +30,10 @@
 .staff-expand{font-size:10px;color:#3269e8;font-weight:700;padding:0;white-space:nowrap}
 .staff-expand:hover{text-decoration:underline}
 .staff-table-hint{font-size:11px;color:#8794a6;margin:9px 0 0}
+
+/* Auth stages: clear progress and a visible loading indicator */
+.auth-progress { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 22px; }
+.auth-progress span { border:1px solid #dbe3f1; border-radius:999px; padding:7px 11px; font-size:12px; font-weight:600; color:#66758d; background:#f7f9fd; }
+.auth-progress .auth-progress-current { color:#245cda; border-color:#92b1fb; background:#eaf1ff; }
+.auth-spinner { animation:auth-spin .8s linear infinite; flex-shrink:0; }
+@keyframes auth-spin { to { transform:rotate(360deg); } }

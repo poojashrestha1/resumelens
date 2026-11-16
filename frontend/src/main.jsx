@@ -358,6 +358,7 @@ function App() {
   const [role, setRole] = useState(sessionStorage.getItem("role") || "");
   const [route, setRoute] = useState(location.pathname);
   const [authMode, setAuthMode] = useState("login");
+  const [registrationFlow, setRegistrationFlow] = useState(false);
   const [email, setEmail] = useState("");
   const [session, setSession] = useState("");
   const [jobs, setJobs] = useState([]);
@@ -450,7 +451,8 @@ function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: f.email, password: f.password }),
         });
-        setNotice(r.message);
+        setNotice(r.message || "Account created. Check your email for the verification code.");
+        setRegistrationFlow(true);
         setAuthMode("confirm");
       } else if (authMode === "confirm") {
         const r = await fetchJSON("/api/auth/confirm", {
@@ -458,7 +460,7 @@ function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: f.email, code: f.code }),
         });
-        setNotice(r.message);
+        setNotice(r.message || "Email verified. You can now sign in.");
         setAuthMode("login");
       } else {
         const endpoint =
@@ -485,6 +487,7 @@ function App() {
             setRole(r.role);
             sessionStorage.setItem("role", r.role);
           }
+          setRegistrationFlow(false);
           go("/dashboard");
         }
       }
@@ -663,6 +666,7 @@ function App() {
             <button
               className="pillbtn"
               onClick={() => {
+                setRegistrationFlow(false);
                 setAuthMode("login");
                 go("/login");
               }}
@@ -709,7 +713,14 @@ function App() {
                     ? "Your recruiter invitation requires a permanent password."
                     : "Sign in as an applicant, HR recruiter, or administrator."}
             </p>
-            <form onSubmit={handleAuth}>
+            {registrationFlow && authMode !== "challenge" && (
+              <div className="auth-progress" aria-label="Registration progress">
+                {[["signup", "1. Create account"], ["confirm", "2. Verify email"], ["login", "3. Sign in"]].map(([step, label]) => (
+                  <span key={step} className={authMode === step ? "auth-progress-current" : ""} aria-current={authMode === step ? "step" : undefined}>{label}</span>
+                ))}
+              </div>
+            )}
+            <form key={authMode} onSubmit={handleAuth}>
               <label>
                 Email
                 <input
@@ -723,7 +734,7 @@ function App() {
               {authMode === "confirm" ? (
                 <label>
                   Verification code
-                  <input name="code" required />
+                  <input key="verification-code" name="code" type="text" inputMode="numeric" autoComplete="one-time-code" required autoFocus />
                 </label>
               ) : (
                 <label>
@@ -741,7 +752,8 @@ function App() {
                   />
                 </label>
               )}
-              <button disabled={busy} className="primary wide">
+              <button disabled={busy} className="primary wide" aria-busy={busy}>
+                {busy && <RefreshCw size={17} className="auth-spinner" aria-hidden="true" />}
                 {busy
                   ? "Working…"
                   : authMode === "signup"
@@ -758,6 +770,7 @@ function App() {
               {authMode === "login" ? (
                 <button
                   onClick={() => {
+                    setRegistrationFlow(true);
                     setAuthMode("signup");
                     setError("");
                   }}
@@ -767,6 +780,7 @@ function App() {
               ) : (
                 <button
                   onClick={() => {
+                    setRegistrationFlow(false);
                     setAuthMode("login");
                     setError("");
                   }}
