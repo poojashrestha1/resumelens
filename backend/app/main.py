@@ -241,7 +241,10 @@ async def submit(job_id:Annotated[str,Form()],details:Annotated[str,Form()],resu
     job=storage.get('jobs',job_id)
     if not job or not job.get('active',True):raise HTTPException(404,'Job not available')
     try:fields=ApplicationDetails.model_validate_json(details).model_dump()
-    except Exception:raise HTTPException(422,'Invalid application fields')
+    except Exception as exc:
+        from pydantic import ValidationError
+        if isinstance(exc,ValidationError):raise HTTPException(422,detail=exc.errors())
+        raise HTTPException(422,'Invalid application fields')
     data=await read_pdf(resume)
     cover_data=await read_pdf(cover_file)
     if not data and not fields['education'] and not fields['experience'] and not fields['skills']:

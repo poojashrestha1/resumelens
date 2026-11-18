@@ -130,7 +130,7 @@ function ApplicantForm({ job, token, onClose, onSubmitted }) {
       return;
     }
     setBusy(true);
-    onError("");
+    setFormError("");
     try {
       const details = {
         ...fields,
@@ -150,13 +150,19 @@ function ApplicantForm({ job, token, onClose, onSubmitted }) {
         body: data,
       });
       const body = await r.json();
-      if (!r.ok)
-        throw Error(
-          typeof body.detail === "string" ? body.detail : "Application failed",
-        );
+      if (!r.ok) {
+        if (Array.isArray(body.detail)) {
+          const msgs = body.detail.map(e => {
+            const field = e.loc?.slice(-1)[0] || "field";
+            return `${field}: ${e.msg}`;
+          });
+          throw Error(msgs.join("\n"));
+        }
+        throw Error(typeof body.detail === "string" ? body.detail : "Application failed");
+      }
       onSubmitted();
     } catch (e) {
-      onError(e.message);
+      setFormError(e.message);
     } finally {
       setBusy(false);
     }
@@ -203,13 +209,7 @@ function ApplicantForm({ job, token, onClose, onSubmitted }) {
           Upload your résumé to autofill, or enter everything manually. You
           control the final information.
         </p>
-        {formError && (
-          <div className="flash bad" role="alert" style={{position:"relative",margin:"0 0 1rem"}}>
-            <strong>Please fix the following:</strong>
-            <pre style={{margin:"0.25rem 0 0",whiteSpace:"pre-wrap",fontSize:"0.85rem"}}>{formError}</pre>
-            <button onClick={() => setFormError("")}>×</button>
-          </div>
-        )}
+
         <div className="autofill-box">
           <label>
             Auto-fill from résumé (PDF, max 5 MB; optional)
@@ -269,6 +269,13 @@ function ApplicantForm({ job, token, onClose, onSubmitted }) {
             <ArrowRight size={16} />
           </button>
         </form>
+        {formError && (
+          <div className="form-error-toast" role="alert">
+            <strong>Please fix the following:</strong>
+            <pre>{formError}</pre>
+            <button onClick={() => setFormError("")}>×</button>
+          </div>
+        )}
       </div>
     </div>
   );
