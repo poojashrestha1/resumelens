@@ -40,7 +40,7 @@ async function fetchJSON(path, options = {}) {
     );
   return value;
 }
-function ApplicantForm({ job, token, onClose, onSubmitted, onError }) {
+function ApplicantForm({ job, token, onClose, onSubmitted }) {
   const empty = {
     name: "",
     email: "",
@@ -60,6 +60,7 @@ function ApplicantForm({ job, token, onClose, onSubmitted, onError }) {
   const [busy, setBusy] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [message, setMessage] = useState("");
+  const [formError, setFormError] = useState("");
   const [dirty, setDirty] = useState({});
   const dirtyRef = React.useRef({});
   const [processingSeconds, setProcessingSeconds] = useState(null);
@@ -202,6 +203,13 @@ function ApplicantForm({ job, token, onClose, onSubmitted, onError }) {
           Upload your résumé to autofill, or enter everything manually. You
           control the final information.
         </p>
+        {formError && (
+          <div className="flash bad" role="alert" style={{position:"relative",margin:"0 0 1rem"}}>
+            <strong>Please fix the following:</strong>
+            <pre style={{margin:"0.25rem 0 0",whiteSpace:"pre-wrap",fontSize:"0.85rem"}}>{formError}</pre>
+            <button onClick={() => setFormError("")}>×</button>
+          </div>
+        )}
         <div className="autofill-box">
           <label>
             Auto-fill from résumé (PDF, max 5 MB; optional)
@@ -1270,7 +1278,6 @@ function App() {
               job={chosen}
               token={token}
               onClose={() => setChosen(null)}
-              onError={setError}
               onSubmitted={async () => {
                 setChosen(null);
                 await load();
