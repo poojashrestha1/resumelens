@@ -305,3 +305,7 @@ resource "aws_route53_record" "web" {
   ttl = 60
   records = [aws_eip.web.public_ip]
 }
+import {
+  to = aws_route53_record.web[0]
+  id = "Z00701761MG5Z76PS3XPI_cloudlyspeaking.com_A"
+}
