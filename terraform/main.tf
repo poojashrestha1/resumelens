@@ -304,6 +304,7 @@ resource "aws_route53_record" "web" {
   type = "A"
   ttl = 60
   records = [aws_eip.web.public_ip]
+  allow_overwrite = true
 }
 import {
   to = aws_route53_record.web[0]
