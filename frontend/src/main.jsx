@@ -477,6 +477,22 @@ function App() {
         });
         setNotice(r.message || "Email verified. You can now sign in.");
         setAuthMode("login");
+      } else if (authMode === "forgot") {
+        const r = await fetchJSON("/api/auth/forgot-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: f.email }),
+        });
+        setNotice(r.message);
+        setAuthMode("reset");
+      } else if (authMode === "reset") {
+        const r = await fetchJSON("/api/auth/reset-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: f.email, code: f.code, password: f.password }),
+        });
+        setNotice(r.message);
+        setAuthMode("login");
       } else {
         const endpoint =
           authMode === "challenge" ? "/api/auth/challenge" : "/api/auth/login";
@@ -717,7 +733,11 @@ function App() {
                   ? "Verify your email"
                   : authMode === "challenge"
                     ? "Set new password"
-                    : "Welcome back"}
+                    : authMode === "forgot"
+                      ? "Reset your password"
+                      : authMode === "reset"
+                        ? "Enter reset code"
+                        : "Welcome back"}
             </h1>
             <p>
               {authMode === "signup"
@@ -726,7 +746,11 @@ function App() {
                   ? "Enter the code Cognito sent to your email."
                   : authMode === "challenge"
                     ? "Your recruiter invitation requires a permanent password."
-                    : "Sign in as an applicant, HR recruiter, or administrator."}
+                    : authMode === "forgot"
+                      ? "Enter your email and we'll send you a reset code."
+                      : authMode === "reset"
+                        ? "Enter the code sent to your email and choose a new password."
+                        : "Sign in as an applicant, HR recruiter, or administrator."}
             </p>
             {registrationFlow && authMode !== "challenge" && (
               <div className="auth-progress" aria-label="Registration progress">
@@ -751,19 +775,27 @@ function App() {
                   Verification code
                   <input key="verification-code" name="code" type="text" inputMode="numeric" autoComplete="one-time-code" required autoFocus />
                 </label>
+              ) : authMode === "forgot" ? null
+              : authMode === "reset" ? (
+                <>
+                  <label>
+                    Reset code
+                    <input name="code" type="text" inputMode="numeric" autoComplete="one-time-code" required autoFocus />
+                  </label>
+                  <label>
+                    New password
+                    <input type="password" name="password" minLength={8} required autoComplete="new-password" />
+                  </label>
+                </>
               ) : (
                 <label>
-                  {authMode === "challenge"
-                    ? "New permanent password"
-                    : "Password"}
+                  {authMode === "challenge" ? "New permanent password" : "Password"}
                   <input
                     type="password"
                     name="password"
                     minLength={8}
                     required
-                    autoComplete={
-                      authMode === "login" ? "current-password" : "new-password"
-                    }
+                    autoComplete={authMode === "login" ? "current-password" : "new-password"}
                   />
                 </label>
               )}
@@ -777,29 +809,26 @@ function App() {
                       ? "Confirm email"
                       : authMode === "challenge"
                         ? "Set password"
-                        : "Sign in"}{" "}
+                        : authMode === "forgot"
+                          ? "Send reset code"
+                          : authMode === "reset"
+                            ? "Reset password"
+                            : "Sign in"}{" "}
                 <ArrowRight size={17} />
               </button>
             </form>
             <div className="authswitch">
               {authMode === "login" ? (
-                <button
-                  onClick={() => {
-                    setRegistrationFlow(true);
-                    setAuthMode("signup");
-                    setError("");
-                  }}
-                >
-                  New applicant? Create account
-                </button>
+                <>
+                  <button onClick={() => { setRegistrationFlow(true); setAuthMode("signup"); setError(""); }}>
+                    New applicant? Create account
+                  </button>
+                  <button className="forgot-link" onClick={() => { setAuthMode("forgot"); setError(""); }}>
+                    Forgot password?
+                  </button>
+                </>
               ) : (
-                <button
-                  onClick={() => {
-                    setRegistrationFlow(false);
-                    setAuthMode("login");
-                    setError("");
-                  }}
-                >
+                <button onClick={() => { setRegistrationFlow(false); setAuthMode("login"); setError(""); }}>
                   Back to sign in
                 </button>
               )}

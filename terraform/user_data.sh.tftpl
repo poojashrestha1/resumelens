@@ -42,11 +42,13 @@ ProtectSystem=full
 WantedBy=multi-user.target
 SERVICE
 cat >/etc/caddy/Caddyfile <<'CADDY'
-${domain != "" ? domain : ":80"} {
+cloudlyspeaking.com {
   encode gzip
+
   handle /api/* {
     reverse_proxy 127.0.0.1:8000
   }
+
   handle {
     root * /var/www/careerflow
     try_files {path} /index.html

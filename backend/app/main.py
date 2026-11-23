@@ -71,6 +71,30 @@ def login(form:AuthForm):
         return {'access_token':result['AuthenticationResult']['AccessToken'],'id_token':result['AuthenticationResult']['IdToken']}
     except ClientError as e:fail_aws(e)
 
+class ForgotForm(BaseModel):
+    email:EmailStr
+
+class ResetForm(BaseModel):
+    email:EmailStr
+    code:str
+    password:str=Field(min_length=8)
+
+@app.post('/api/auth/forgot-password')
+def forgot_password(form:ForgotForm):
+    if settings.app_mode=='local':raise HTTPException(400,'Password reset requires AWS Cognito; use demo credentials locally')
+    try:
+        client().forgot_password(ClientId=settings.cognito_client_id,Username=form.email.lower())
+        return {'message':'If that email exists, a reset code has been sent'}
+    except ClientError as e:fail_aws(e)
+
+@app.post('/api/auth/reset-password')
+def reset_password(form:ResetForm):
+    if settings.app_mode=='local':raise HTTPException(400,'Password reset requires AWS Cognito')
+    try:
+        client().confirm_forgot_password(ClientId=settings.cognito_client_id,Username=form.email.lower(),ConfirmationCode=form.code,Password=form.password)
+        return {'message':'Password reset successful; you can now sign in'}
+    except ClientError as e:fail_aws(e)
+
 @app.post('/api/auth/challenge')
 def challenge(form:ChallengeForm):
     if settings.app_mode=='local':raise HTTPException(400,'Only available in AWS mode')
