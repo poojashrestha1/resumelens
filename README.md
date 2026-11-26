@@ -1,4 +1,4 @@
-# ResumeLens— Career Application Platform
+# ResumeLens
 
 A full-stack job application platform built with **React**, **FastAPI**, and **AWS**. Applicants can browse open positions and submit applications with résumé parsing. HR staff can review candidates, manage positions, and update application statuses. Admins manage the full platform including recruiter accounts.
 
