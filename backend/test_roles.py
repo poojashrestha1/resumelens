@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from app.main import app
 from app import storage
-
+##
 def _login(client,email,password):
     res=client.post('/api/auth/login',json={'email':email,'password':password})
     assert res.status_code==200,res.text
