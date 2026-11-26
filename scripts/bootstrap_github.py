@@ -25,7 +25,7 @@ provider_arn=f'arn:aws:iam::{account}:oidc-provider/token.actions.githubusercont
 try:iam.get_open_id_connect_provider(OpenIDConnectProviderArn=provider_arn)
 except iam.exceptions.NoSuchEntityException:
     iam.create_open_id_connect_provider(Url='https://token.actions.githubusercontent.com',ClientIDList=['sts.amazonaws.com'])
-trust={'Version':'2012-10-17','Statement':[{'Effect':'Allow','Principal':{'Federated':provider_arn},'Action':'sts:AssumeRoleWithWebIdentity','Condition':{'StringEquals':{'token.actions.githubusercontent.com:aud':'sts.amazonaws.com','token.actions.githubusercontent.com:sub':f'repo:{a.repo}:ref:refs/heads/{a.branch}'}}}]}
+trust={'Version':'2012-10-17','Statement':[{'Effect':'Allow','Principal':{'Federated':provider_arn},'Action':'sts:AssumeRoleWithWebIdentity','Condition':{'StringEquals':{'token.actions.githubusercontent.com:aud':'sts.amazonaws.com'},'StringLike':{'token.actions.githubusercontent.com:sub':f'repo:{a.repo}:*'}}}]}
 role='careerflow-github-terraform-lab'
 try:iam.create_role(RoleName=role,AssumeRolePolicyDocument=json.dumps(trust),Description='Lab-only GitHub OIDC Terraform role; branch restricted')
 except iam.exceptions.EntityAlreadyExistsException:iam.update_assume_role_policy(RoleName=role,PolicyDocument=json.dumps(trust))
