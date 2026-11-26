@@ -275,3 +275,4 @@ careerflow-v2/
 | `POST` | `/api/admin/recruiters` | Admin | Invite a recruiter |
 
 Full interactive docs available at `http://localhost:8000/docs` when running locally.
+ 
