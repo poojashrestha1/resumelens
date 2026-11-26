@@ -196,10 +196,10 @@ jobs:
       - name: Health check
         run: |
           set -euo pipefail
-          URL="http://${PUBLIC_IP}/api/health"
+          URL="https://${PUBLIC_IP}/api/health"
           echo "Running health check against ${URL}..."
           for i in {1..10}; do
-            STATUS=$(curl -fsSL --max-time 10 "${URL}" \
+            STATUS=$(curl -fsSLk --max-time 10 "${URL}" \
               | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok'))" 2>/dev/null || echo "false")
             if [[ "$STATUS" == "True" ]]; then
               echo "Health check passed."
